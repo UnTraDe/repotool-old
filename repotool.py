@@ -8,7 +8,7 @@ output_filename = None
 prepand_command = None
 verbose = False
 
-github_orgs_url_template = "https://api.github.com/orgs/{0}/repos?per_page=200"
+github_api_url_template = "https://api.github.com/{0}/{1}/repos?per_page=200" # &page=2
 
 def write_urls(urls):
     global output_filename
@@ -90,33 +90,46 @@ def modules_to_urls():
 
     write_urls(urls)
 
-def github_orgs_to_list(github_org_url):
+def github_to_list(url):
     if verbose:
-        print("GET " + github_org_url)
+        print("GET " + url)
     
-    r = requests.get(github_org_url)
+    r = requests.get(url)
 
     if r.status_code != 200:
-        raise Exception("failed to get response code 200 from: " + github_org_url)
-    
+        raise Exception("failed to get response code 200 from: " + url)
+
     repos = r.json()
 
-    if verbose:
-        print("found {0} repositories".format(len(repos)))
-
+    # if verbose:
+    #     print("found {0} repositories".format(len(repos)))
+    
     urls = []
 
     for repo in repos:
         urls.append(repo["clone_url"])
 
-    write_urls(urls)
+    for l in r.headers["link"].split(','):
+        entries = l.split(';')
+        if entries[1].split('=')[1].replace('"', '') == "next":
+            next_url = entries[0].replace('<', '').replace('>', '')
+            print("found next page url: {0}".format(next_url))
+            next_urls = github_to_list(next_url)
+            urls.extend(next_urls)
+            break
+
+    return urls
+
+def download_and_save_from_github(url):
+    url_list = github_to_list(url)
+    write_urls(url_list)
 
 def print_help():
     pass
 
 if __name__ == "__main__":
     arg_len = len(sys.argv)
-
+    
     # print(sys.argv)
 
     cmd = None
@@ -131,8 +144,11 @@ if __name__ == "__main__":
         elif (arg == "-p" or arg == "--prepend") and i+1 <= arg_len:
             prepand_command = sys.argv[i+1]
         elif arg == "--github-orgs" and i+1 <= arg_len:
-            orgs_url = github_orgs_url_template.format(sys.argv[i+1])
-            cmd = lambda: github_orgs_to_list(orgs_url)
+            orgs_url = github_api_url_template.format("orgs", sys.argv[i+1])
+            cmd = lambda: download_and_save_from_github(orgs_url)
+        elif arg == "--github-user" and i+1 <= arg_len:
+            orgs_url = github_api_url_template.format("users", sys.argv[i+1])
+            cmd = lambda: download_and_save_from_github(orgs_url)
         elif arg == "-v":
             verbose = True
         elif arg == "--scan-repos" and i+1 <= arg_len:
