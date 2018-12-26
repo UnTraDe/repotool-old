@@ -7,6 +7,7 @@ input_filename = None
 output_filename = None
 prepand_command = None
 verbose = False
+compare_file = None
 
 github_api_url_template = "https://api.github.com/{0}/{1}/repos?per_page=200" # &page=2
 
@@ -16,8 +17,26 @@ def write_urls(urls):
     if output_filename is None:
         output_filename = "output.txt"
 
+    filtered = []
+
+    if compare_file is not None:
+        archive = []
+        with open(compare_file, "r") as f:
+            archive = f.readlines()
+
+        archive = [x.strip() for x in archive]
+
+        for u in urls:
+            if u not in archive:
+                filtered.append(u)
+
     with open(output_filename, "w") as f:
-        for url in urls:
+        if len(filtered) == 0:
+            final_urls = urls
+        else:
+            final_urls = filtered
+
+        for url in final_urls:
             if prepand_command is not None:
                 f.write(prepand_command.strip() + " " + url + "\n")
             else:
@@ -25,8 +44,8 @@ def write_urls(urls):
                 
             if verbose:
                 print('url "{0}" written'.format(url))
-
-    print("written {0} repositories to {1}".format(len(urls), output_filename))
+    
+    print("written {0} repositories to {1} (skipped {2})".format(len(final_urls), output_filename, len(urls) - len(final_urls)))
 
 def find_git_dir(path):
     with os.scandir(path) as it:
@@ -109,14 +128,15 @@ def github_to_list(url):
     for repo in repos:
         urls.append(repo["clone_url"])
 
-    for l in r.headers["link"].split(','):
-        entries = l.split(';')
-        if entries[1].split('=')[1].replace('"', '') == "next":
-            next_url = entries[0].replace('<', '').replace('>', '')
-            print("found next page url: {0}".format(next_url))
-            next_urls = github_to_list(next_url)
-            urls.extend(next_urls)
-            break
+    if "link" in r.headers:
+        for l in r.headers["link"].split(','):
+            entries = l.split(';')
+            if entries[1].split('=')[1].replace('"', '') == "next":
+                next_url = entries[0].replace('<', '').replace('>', '')
+                print("found next page url: {0}".format(next_url))
+                next_urls = github_to_list(next_url)
+                urls.extend(next_urls)
+                break
 
     return urls
 
@@ -154,6 +174,8 @@ if __name__ == "__main__":
         elif arg == "--scan-repos" and i+1 <= arg_len:
             reposdir = sys.argv[i+1]
             cmd = lambda: scan_reposdir(reposdir)
+        elif arg == "-c" and i+1 <= arg_len:
+            compare_file = sys.argv[i+1]
 
     if cmd is not None:
         cmd()
