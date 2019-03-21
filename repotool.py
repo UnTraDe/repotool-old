@@ -8,6 +8,8 @@ output_filename = None
 prepand_command = None
 verbose = False
 compare_file = None
+filter_forks = False
+only_forks = False
 
 github_api_url_template = "https://api.github.com/{0}/{1}/repos?per_page=200" # &page=2
 
@@ -126,6 +128,12 @@ def github_to_list(url):
     urls = []
 
     for repo in repos:
+        if filter_forks and repo["fork"]:
+            continue
+        
+        if only_forks and not repo["fork"]:            
+            continue
+            
         urls.append(repo["clone_url"])
 
     if "link" in r.headers:
@@ -155,7 +163,12 @@ if __name__ == "__main__":
     cmd = None
 
     for i, arg in enumerate(sys.argv):
-        if arg == "-i" and i+1 <= arg_len:
+        if (arg == "-d" or arg == "--default") and i+1 <= arg_len:
+            prepand_command = "git clone --mirror"
+            output_filename = sys.argv[i+1] + ".txt"
+            orgs_url = github_api_url_template.format("orgs", sys.argv[i+1])
+            cmd = lambda: download_and_save_from_github(orgs_url)
+        elif arg == "-i" and i+1 <= arg_len:
             input_filename = sys.argv[i+1]
         elif arg == "-o" and i+1 <= arg_len:
             output_filename = sys.argv[i+1]
@@ -174,6 +187,10 @@ if __name__ == "__main__":
         elif arg == "--scan-repos" and i+1 <= arg_len:
             reposdir = sys.argv[i+1]
             cmd = lambda: scan_reposdir(reposdir)
+        elif arg == "--filter-forks" and i+1 <= arg_len:
+            filter_forks = True
+        elif arg == "--only-forks" and i+1 <= arg_len:
+            only_forks = True
         elif arg == "-c" and i+1 <= arg_len:
             compare_file = sys.argv[i+1]
 
